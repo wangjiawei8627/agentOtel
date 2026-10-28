@@ -1,0 +1,62 @@
+# OpenTelemetry Collector 配置（V0.3：Traces 尾采样 + Metrics 双管道）
+# - Trace：接收 OTLP -> 尾采样（保留错误/慢链路，正常链路按比例）-> 批量 -> Jaeger
+# - Metric：接收 OTLP -> 批量 -> Prometheus 格式暴露给 Prometheus 抓取
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+  # 尾采样：在 Collector 端缓存整条 trace 后再决策，
+  # 可基于“是否含错误 / 是否慢 / 采样比例”智能保留，
+  # 比头部采样更能保证链路完整且不丢关键问题。
+  tail_sampling:
+    decision_wait: 10s          # 等待 trace 完整的时间（高并发可调大）
+    expected_new_traces_per_sec: 100
+    policies:
+      # 1) 任何含 ERROR 的 trace 全部保留
+      - name: keep-errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      # 2) 慢链路（任一 span 超过 5s）全部保留
+      - name: keep-slow
+        type: duration
+        duration:
+          threshold_ms: 5000
+      # 3) 其余正常链路按 10% 采样（降成本，调大可观测更全）
+      - name: sample-normal
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: 0.0.0.0:8889
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      # tail_sampling 必须在 batch 之前（需要完整 trace 才能决策）
+      receivers: [otlp]
+      processors: [memory_limiter, tail_sampling, batch]
+      exporters: [otlp/jaeger, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus, debug]

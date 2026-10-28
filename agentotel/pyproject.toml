@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentotel"
+version = "0.3.0"
+description = "OpenTelemetry-native, pluggable instrumentation & monitoring framework for any AI Agent (LangGraph / LangChain / LlamaIndex / custom agents)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "AgentOTel Contributors" }]
+keywords = [
+    "opentelemetry",
+    "agent",
+    "langgraph",
+    "langchain",
+    "observability",
+    "tracing",
+    "genai",
+    "llm",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
+]
+
+# ---- 核心依赖：只依赖 OTel 官方 SDK，不绑定任何 Agent 框架 ----
+dependencies = [
+    "opentelemetry-api>=1.25",
+    "opentelemetry-sdk>=1.25",
+    "opentelemetry-exporter-otlp>=1.25",
+    "wrapt>=1.15",
+]
+
+[project.optional-dependencies]
+# 对应各 Agent 框架的自动插桩能力，按需安装
+langgraph = [
+    "langgraph>=0.2",
+    "langchain-core>=0.2",
+]
+openai = [
+    "openai>=1.30",
+]
+# LlamaIndex 自动插桩
+llamaindex = [
+    "llama-index-core>=0.11",
+]
+# FastAPI 网关插桩
+fastapi = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+# 本地 token 估算（LLM 不返回 usage 时兜底）
+token = [
+    "tiktoken>=0.7",
+]
+# 开发与测试
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.23",
+]
+
+[project.urls]
+Homepage = "https://github.com/agentotel/agentotel"
+Documentation = "https://github.com/agentotel/agentotel/tree/main/docs"
+Issues = "https://github.com/agentotel/agentotel/issues"
+
+# ---- setuptools 包发现 ----
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+agentotel = ["py.typed"]

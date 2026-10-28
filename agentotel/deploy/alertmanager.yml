@@ -1,0 +1,54 @@
+# Alertmanager 配置：分组、静默、路由到钉钉 / 飞书
+# 接入方式：docker-compose 中 alertmanager 挂载本文件；prometheus.yml 指向 alertmanager:9093
+global:
+  resolve_timeout: 5m        # 告警恢复后多久标记为已解决
+
+# 告警模板（可选，用于自定义通知格式）
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+# 根路由：所有未匹配子路由的告警进入这里
+route:
+  receiver: "dingtalk-default"
+  group_by: ["alertname", "category"]     # 按告警名 + 类别分组，同类合并成一条
+  group_wait: 10s          # 首次分组等待，聚合同组告警
+  group_interval: 30s      # 同组新增告警的发送间隔
+  repeat_interval: 2h      # 未恢复告警的重复提醒间隔
+  routes:
+    # 成本类 -> 飞书
+    - matchers:
+        - category = "cost"
+      receiver: "feishu-cost"
+    # 严重级别 -> 钉钉严重群（同时通知）
+    - matchers:
+        - severity = "critical"
+      receiver: "dingtalk-critical"
+      continue: true        # 继续匹配后续路由（可同时进默认）
+
+# 静默规则：当某服务存在 critical 告警时，抑制该服务的 warning 告警，避免刷屏
+inhibit_rules:
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ["category", "alertname"]
+
+# 通知接收器
+receivers:
+  # 钉钉默认群：通过 prometheus-webhook-dingtalk 中转
+  - name: "dingtalk-default"
+    webhook_configs:
+      - url: "http://dingtalk-webhook:8060/dingtalk/agentotel/send"
+        send_resolved: true
+
+  # 钉钉严重群
+  - name: "dingtalk-critical"
+    webhook_configs:
+      - url: "http://dingtalk-webhook:8060/dingtalk/agentotel-critical/send"
+        send_resolved: true
+
+  # 飞书成本群：通过飞书适配器中转（见 deploy/notify/feishu_adapter.py）
+  - name: "feishu-cost"
+    webhook_configs:
+      - url: "http://feishu-adapter:8061/webhook"
+        send_resolved: true

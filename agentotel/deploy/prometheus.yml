@@ -1,0 +1,25 @@
+# Prometheus 抓取配置
+# 每 15s 从 otel-collector 的 8889 端点抓取已转换为 Prometheus 格式的 Agent 指标
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# 告警规则（容器内路径，见 docker-compose 挂载）
+rule_files:
+  - /etc/prometheus/alert_rules.yml
+
+# 告警推送到 Alertmanager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: agentotel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]
+
+  # 同时抓取 Alertmanager 自身指标
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]

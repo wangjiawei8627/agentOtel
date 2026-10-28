@@ -1,0 +1,97 @@
+# AgentOTel V0.3 一键本地可观测栈
+# Collector + Jaeger(Trace) + Prometheus(Metric) + Alertmanager + 钉钉/飞书 + Grafana
+# 启动： docker-compose up -d
+# 停止： docker-compose down
+version: "3.8"
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"
+      - "14250:14250"
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./alertmanager/templates:/etc/alertmanager/templates
+    ports:
+      - "9093:9093"  # Alertmanager UI
+
+  # 钉钉中转：Alertmanager webhook -> 钉钉机器人
+  dingtalk-webhook:
+    image: timonwong/prometheus-webhook-dingtalk:v2.1.0
+    command:
+      - --config.file=/etc/prometheus-webhook-dingtalk/config.yml
+    volumes:
+      - ./dingtalk/config.yml:/etc/prometheus-webhook-dingtalk/config.yml
+    ports:
+      - "8060:8060"
+
+  # 飞书中转：Alertmanager webhook -> 飞书机器人
+  feishu-adapter:
+    image: python:3.12-slim
+    working_dir: /app
+    command: ["python", "feishu_adapter.py"]
+    volumes:
+      - ./notify/feishu_adapter.py:/app/feishu_adapter.py
+    environment:
+      # 填入真实飞书 webhook 与加签 secret
+      - FEISHU_WEBHOOK=${FEISHU_WEBHOOK:-}
+      - FEISHU_SECRET=${FEISHU_SECRET:-}
+    ports:
+      - "8061:8061"
+
+  # AgentOTel 轻量管理后台（只读）
+  console:
+    image: python:3.12-slim
+    working_dir: /app
+    command: ["sh","-c","pip install -q fastapi uvicorn && uvicorn agentotel.console.app:console_app --host 0.0.0.0 --port 8080"]
+    environment:
+      - PYTHONPATH=/app/src
+      - AGENTOTEL_PROM_URL=http://prometheus:9090
+    volumes:
+      - ../src:/app/src:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus

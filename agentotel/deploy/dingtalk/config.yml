@@ -1,0 +1,16 @@
+# prometheus-webhook-dingtalk 配置
+# 文档：https://github.com/timonwong/prometheus-webhook-dingtalk
+# 钉钉机器人获取：群设置 -> 智能群助手 -> 自定义机器人 -> 复制 access_token 与加签 secret
+targets:
+  # 默认群
+  agentotel:
+    url: https://oapi.dingtalk.com/robot/send?access_token=REPLACE_WITH_DINGTALK_TOKEN
+    secret: REPLACE_WITH_DINGTALK_SECRET
+    message:
+      title: "AgentOTel 告警"
+  # 严重群（可与默认群不同）
+  agentotel-critical:
+    url: https://oapi.dingtalk.com/robot/send?access_token=REPLACE_WITH_CRITICAL_TOKEN
+    secret: REPLACE_WITH_CRITICAL_SECRET
+    message:
+      title: "AgentOTel 严重告警"
